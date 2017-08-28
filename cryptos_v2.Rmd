@@ -1,0 +1,191 @@
+---
+title: "Cryptocurrencies"
+author: "Kenneth Osborne"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+knitr::opts_chunk$set(cache=TRUE)
+myWD='C:/Users/Duckie/Documents/myR/cryptocurrencies/'
+knitr::opts_chunk$set(root.dir = myWD)
+```
+
+# Introduction
+
+Here we review the relative value of Bitcoin (BTC) to Litecoin(LTC).
+
+## Load libraries and helper functions
+
+```{r, message = FALSE}
+library('tidyverse') # all around good package
+library('data.table') # data manipulation
+library('forcats') # factor manipulation
+library('lubridate') # date and time
+library('Quandl')
+library('corrplot') # visualization
+library('caret') # modelling
+```
+
+## Load data
+
+We use data from Quandl to get the daily prices of both BTC and LTC.
+
+```{r warning=FALSE, results=FALSE}
+bitcoin  <- Quandl("BTCE/USDBTC",collapse = "daily") %>% as.tbl()
+litecoin <- Quandl("BTCE/USDLTC",collapse = "daily") %>% as.tbl()
+```
+
+# Data exploration
+
+Here we see what our data look like for the first time.
+
+```{r}
+# bitcoin
+# litecoin
+```
+We're just interested in the daily average for now. We then combine the two sets
+
+```{r}
+btc <- bitcoin  %>% select(Date,Average) %>% 
+    transmute(Date=Date,
+              BTC=Average)
+ltc<- litecoin %>% select(Date,Average) %>%
+    transmute(Date=Date,
+              LTC=Average)
+df<- inner_join(btc, ltc, by = "Date")
+df<- df[complete.cases(df),] %>% mutate(LTCvsBTC= LTC/BTC)
+# df
+```
+We can try to compare how bitcoin is changing vs time for both bitcoin and litecoin, but they're on such different scales that we have to use a logarithmic scale to see all resolutions clearly. To do that we need to put everything in long format.
+
+```{r}
+avg <- df %>% select(Date,BTC,LTC,LTCvsBTC)
+avg.long <- melt(avg %>% select(-LTCvsBTC),
+                 id="Date")
+
+ggplot(avg.long, aes(x=Date,y=value,color=variable)) + 
+    scale_y_log10() +
+    geom_line() + 
+    theme_light()
+```
+
+It often looks like bitcoin and litecoin are moving in tandem, but does one yield better returns than the other?
+
+To answer this question, we will need to do a little analysis. 
+
+
+# Relative value 
+
+## Visual ROI comparison
+
+The real question behind 'Which coin yields better returns?' is intrinsically what is the return as a percent. So we calculate the daily return on investment (ROI).
+
+
+```{r}
+BTCyest<- df$BTC[-1]
+BTCyest<- append(BTCyest, NA)
+df<- mutate(df, BTCgain = BTC/BTCyest, BTCroi = BTCgain -1)
+
+LTCyest<- df$LTC[-1]
+LTCyest<- append(LTCyest, NA)
+df<- mutate(df, LTCgain = LTC/LTCyest, LTCroi = LTCgain -1)
+
+df<- df[complete.cases(df),]
+```
+
+Plotting daily BTC and LTC ROI doesn't lead to any deep insights as to which performs better on average. Maybe because we are plotting too many data points, and the data are otherwise too similar for a real trend to be visually explicit.
+
+```{r}
+avg <- df %>% select(Date,BTCroi,LTCroi)
+avg.long <- melt(avg, id="Date")
+
+ggplot(avg.long, aes(x=Date,y=value,color=variable)) + 
+    geom_hline(yintercept=0) +
+    geom_line() + 
+    # geom_hline(yintercept=0) +
+    theme_light()
+```
+
+Perhaps by only looking at the relative price since the start of 2017 we can more easily see a trend
+
+```{r}
+ggplot(avg.long[df$Date>=ymd(20170101),], aes(x=Date,y=value,color=variable)) + 
+    geom_hline(yintercept=0) +
+    geom_line() + 
+    theme_light()
+```
+
+Here we see that the fluctuations on Litecoin might have been higher for the present year, but I don't think we can say much else.
+
+## Average ROI comparison
+
+We can check the average ROI across our data to numerically. 
+
+```{r}
+avg.long %>% group_by(variable) %>% summarise(PctDaily = mean(value)*100)
+```
+And looking at ROI for just this year, we have 
+
+```{r}
+avg.long[df$Date>=ymd(20170101),] %>% group_by(variable) %>% summarise(PctDaily = mean(value)*100)
+```
+
+An astonishing .57% and 1.37% growth DAILY.
+
+## Relative growth plot
+
+Another idea would be to consider the of daily realtive growth (REL), where REL is defined as LTCgain divided by BTCgain. If the LTCgain is greater than the BTCgain, then REL > 1. If LTCgain is less than BTCgain, then REL < 1. 
+
+```{r}
+df <- df %>% mutate(REL=LTCgain/BTCgain)
+
+ggplot(df, aes(x=Date,y=REL)) + 
+    geom_hline(yintercept=1) +
+    geom_line(aes(color='red')) +
+    theme_light() +
+    theme(legend.position = "none")
+```
+
+This is a little much, so we just take the 2017 data
+
+```{r}
+ggplot(df[df$Date>=ymd(20170101),], aes(x=Date,y=REL)) + 
+    geom_hline(yintercept=1) +
+    geom_line(aes(color='red')) +
+    theme(legend.position = "none")
+```
+
+# By the numbers
+
+## Average ROI comparison
+
+We can check the average ROI across our data to numerically. 
+
+```{r}
+avg.long %>% group_by(variable) %>% summarise(PctDaily = mean(value)*100)
+```
+And looking at ROI for just this year, we have 
+
+```{r}
+avg.long[df$Date>=ymd(20170101),] %>% group_by(variable) %>% summarise(PctDaily = mean(value)*100)
+```
+
+An astonishing .57% and 1.37% growth DAILY.
+
+## Relative gains
+
+We can break down each side of things a bit more.
+
+

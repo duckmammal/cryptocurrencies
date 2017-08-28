@@ -1,0 +1,98 @@
+---
+title: "Cryptocurrencies"
+author: "Kenneth Osborne"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+knitr::opts_chunk$set(cache=TRUE)
+myWD='C:/Users/Duckie/Documents/myR/cryptocurrencies/'
+knitr::opts_chunk$set(root.dir = myWD)
+```
+
+# Introduction
+
+Here we review the relative value of Bitcoin (BTC) to Litecoin(LTC).
+
+## Load libraries and helper functions
+
+```{r, message = FALSE}
+library('tidyverse') # all around good package
+library('data.table') # data manipulation
+library('forcats') # factor manipulation
+library('lubridate') # date and time
+library('Quandl')
+library('corrplot') # visualization
+library('caret') # modelling
+```
+
+## Load data
+
+We use data from Quandl to get the daily prices of both BTC and LTC.
+
+```{r warning=FALSE, results=FALSE}
+bitcoin  <- Quandl("BTCE/USDBTC",collapse = "daily") %>% as.tbl()
+litecoin <- Quandl("BTCE/USDLTC",collapse = "daily") %>% as.tbl()
+```
+
+# Data exploration
+
+Here we see what our data look like for the first time.
+
+```{r}
+# bitcoin
+# litecoin
+```
+We're just interested in the daily average for now. We then combine the two sets
+
+```{r}
+btc <- bitcoin  %>% select(Date,Average,Volume,`Volume (Currency)`) %>% 
+    transmute(Date=Date,
+              BTC=Average,
+              BTC.vol.usd=Volume,
+              BTC.vol=`Volume (Currency)`)
+ltc<- litecoin %>% select(Date,Average,Volume,`Volume (Currency)`) %>%
+    transmute(Date=Date,
+              LTC=Average,
+              LTC.vol.usd=Volume,
+              LTC.vol=`Volume (Currency)`)
+df<- inner_join(btc, ltc, by = "Date")
+df<- df[complete.cases(df),] %>% mutate(LTCvsBTC= LTC/BTC)
+# df
+```
+We can try to compare how bitcoin is changing vs time for both bitcoin and litecoin, but they're on such different scales that we have to use a logarithmic scale to see all resolutions clearly. To do that we need to put everything in long format.
+
+```{r}
+avg <- df %>% select(Date,BTC,LTC,LTCvsBTC)
+avg.long <- melt(avg %>% select(-LTCvsBTC),
+                 id="Date")
+
+ggplot(avg.long, aes(x=Date,y=value,color=variable)) + 
+    scale_y_log10() +
+    geom_line() + 
+    theme_light()
+```
+
+It often looks like bitcoin and litecoin are moving in tandem, but does one yield better returns than the other?
+
+To answer this question, we plot see the relative fluctuation of LTC with respect to the BTC. This is a sensible solution, especially because many platforms only let you trade cryptocurrencies against one another.
+
+```{r}
+ggplot(avg,aes(Date,LTCvsBTC)) + 
+    geom_line(col=2,alpha=.5) + 
+    theme_light() +
+    theme(legend.position = "none")
+```
+
